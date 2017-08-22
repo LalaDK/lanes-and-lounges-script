@@ -1,0 +1,47 @@
+#! /bin/bash
+
+if [[ $# -eq 0 ]] ; then
+    echo "Usage: bowling [DATE] [TIME] [LANES]"
+    echo -e "\tExample:"
+    echo -e "\tbowling 22-08-2017 18:00 1"
+fi
+
+DATOFELT=${1:-$(date +%d-%m-%Y)}
+BOWLINGSTART=${2:-17:00}
+ANTAL_BANER=${3:-1}
+echo "Søger ${ANTAL_BANER} bane(r) d. ${DATOFELT} klokken ${BOWLINGSTART} ..."
+
+VALGTTILBUD=4
+VALGTTILBUDNAME=Bowling
+PAGE=3
+
+find . -name 'product*.html' -delete
+params="datoFelt=${DATOFELT}&bowlingstart=${BOWLINGSTART}&tAntalBaner=${ANTAL_BANER}&valgtTilbud=${VALGTTILBUD}&valgtTilbudName=${VALGTTILBUDNAME}&page=${PAGE}"
+COOKIE_FILE=cookies.txt
+wget -q -O startpage.html --keep-session-cookies --save-cookies $COOKIE_FILE http://web.flexybox.com/internetbooking/banebooking.asp?cID=200
+rm -f startpage.html
+rm -f result.txt
+
+wget -q --load-cookies $COOKIE_FILE -O output.html http://web.flexybox.com/internetbooking/banebooking.asp --post-data $params
+cat output.html | pup 'table.product-info' > products.html
+csplit -f "product" -b "%i.html" products.html /\<table/ {*}
+
+function parseProduct {
+  if [ -s $1 ]; then
+    PRODUCT=$(cat $1 | pup 'table > tbody > tr:nth-child(1) > td[colspan=3] strong text{}')
+    TIME=$(cat $1 | pup 'tr:nth-child(2) td:nth-child(2) strong text{}')
+    LANE_COUNT=$(cat $1 | pup 'tr:nth-child(2) td:nth-child(3) strong text{}')
+    OUT_OF_STOCK=$(cat $1 | grep Udsolgt)
+
+    if [ $(echo $PRODUCT | grep -c EOF) ];
+    then
+      echo -e $PRODUCT"\t\t"$TIME"\t\t"$LANE_COUNT baner"\t"$OUT_OF_STOCK
+
+    fi
+  fi
+}
+
+for file in $(find . -iname "product[0-9]*.html")
+do
+  parseProduct $file
+done
